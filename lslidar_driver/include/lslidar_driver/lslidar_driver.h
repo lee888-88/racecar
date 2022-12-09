@@ -90,7 +90,7 @@ private:
 
     bool use_gps_ts;   
     bool is_start;
-    bool packet_back = false;
+    bool high_reflection;
 
     double min_range;
     double max_range;
@@ -112,7 +112,6 @@ private:
     std::string serial_port_;
     std::string dump_file;
 
-    unsigned char packet_bytes_back[1000] = {0x00};
 
     tm pTime;    
     rclcpp::Time pre_time_;

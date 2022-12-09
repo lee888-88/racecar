@@ -74,12 +74,14 @@ bool LslidarDriver::loadParameters() {
 	this->declare_parameter<double>("min_range",0.3);
 	this->declare_parameter<double>("max_range",100.0);
 	this->declare_parameter<bool>("use_gps_ts",false);
+	this->declare_parameter<bool>("high_reflection",false);
 	this->declare_parameter<double>("angle_disable_min",0.0);
 	this->declare_parameter<double>("angle_disable_max",0.0);
 	this->declare_parameter<std::string>("interface_selection","net");
 
 	this->get_parameter("lidar_name", lidar_name);
 	this->get_parameter("frame_id", frame_id);
+	this->get_parameter("high_reflection", high_reflection);
 	this->get_parameter("scan_topic", scan_topic);
 	this->get_parameter("min_range", min_range);
 	this->get_parameter("max_range", max_range);
@@ -157,6 +159,16 @@ bool LslidarDriver::loadParameters() {
         use_gps_ts = false;
         printf("Lidar is M10 10K 5HZ \n");
     }
+    else if (lidar_name == "M10_GPS"){
+        PACKET_SIZE = 102;
+        package_points = 42;
+        data_bits_start = 6;
+        degree_bits_start = 2;
+        rpm_bits_start = 4;
+        baud_rate_= 460800;
+        points_size_ = 1008;
+        printf("Lidar is M10_GPS \n");
+    }
     else if (lidar_name == "N10")
     {
         PACKET_SIZE = 58;
@@ -169,15 +181,17 @@ bool LslidarDriver::loadParameters() {
         use_gps_ts = false;
         printf("Lidar is N10 ! \n");
     }
-    else if (lidar_name == "M10_GPS"){
-        PACKET_SIZE = 102;
-        package_points = 42;
-        data_bits_start = 6;
-        degree_bits_start = 2;
-        rpm_bits_start = 4;
-        baud_rate_= 460800;
-        points_size_ = 1008;
-        printf("Lidar is M10_GPS \n");
+    else if (lidar_name == "L10")
+    {
+        PACKET_SIZE = 58;
+        package_points = 16;
+        data_bits_start = 7;
+        degree_bits_start = 5;
+        end_degree_bits_start = 55;
+        baud_rate_= 230400;
+        points_size_ = 2000; 
+        use_gps_ts = false;
+        printf("Lidar is L10 ! \n");
     }
 
     scan_pub = this->create_publisher<sensor_msgs::msg::LaserScan>(scan_topic, 10);	
@@ -186,6 +200,7 @@ bool LslidarDriver::loadParameters() {
 }
 
 void LslidarDriver::lidar_order(const std_msgs::msg::Int8::SharedPtr msg) {
+    if (lidar_name == "L10")   return;
     int i = msg->data;
     if( i == 0) is_start = false;
     else        is_start = true;
@@ -202,7 +217,7 @@ void LslidarDriver::lidar_order(const std_msgs::msg::Int8::SharedPtr msg) {
         data[186] = 0xFA;
         data[187] = 0xFB;
 
-		if(lidar_name == "M10" || lidar_name == "M10_TEST" || lidar_name == "M10_GPS"){
+		if(lidar_name == "M10" || lidar_name == "M10_TEST" || lidar_name == "M10_GPS"||lidar_name == "M10_P"){
             if (i <= 1){				    //雷达启停
 				data[184] = 0x01;
 				data[185] = char(i);
@@ -223,13 +238,6 @@ void LslidarDriver::lidar_order(const std_msgs::msg::Int8::SharedPtr msg) {
 				if(is_start) data[185] = 0x01;
 			}       
             else return; 
-		}
-		else if(lidar_name == "M10_P"){
-            if(i <= 1){
-            data[185] = char(i);
-            data[184] = 0x01;
-            }
-            else return;
 		}
 		else if (lidar_name == "M10_PLUS"){
             data[184] = 0x0A;
@@ -444,7 +452,7 @@ int LslidarDriver::receive_data(unsigned char *packet_bytes){
     if(lidar_name == "M10")                     len = 92;
     else if(lidar_name == "M10_TEST")           len = 176;
     else if(lidar_name == "M10_GPS")            len = 102;
-    else if(lidar_name == "N10")                len = packet_bytes[2];
+    else if(lidar_name == "N10" || lidar_name == "L10")                len = packet_bytes[2];
     else
     {
         len_H = packet_bytes[2];
@@ -459,7 +467,7 @@ int LslidarDriver::receive_data(unsigned char *packet_bytes){
         LslidarDriver::recvThread_crc(count_2,link_time);
     }
     q = len;
-    if(lidar_name == "N10") 
+    if(lidar_name == "N10" || lidar_name == "L10") 
     {
         if(packet_bytes[PACKET_SIZE-1] != N10_CalCRC8(packet_bytes, PACKET_SIZE-1))						return 0;
     }
@@ -492,7 +500,7 @@ void LslidarDriver::data_processing(unsigned char *packet_bytes,int len)        
 
 	degree = (s * 256 + z) / 100.f;
 	degree = (degree > 360) ? degree-360 : degree;
-    if(lidar_name == "N10") 
+    if(lidar_name == "N10" || lidar_name == "L10") 
     {
 		int s_e = packet_bytes[end_degree_bits_start];
 		int z_e = packet_bytes[end_degree_bits_start+1];
@@ -514,7 +522,7 @@ void LslidarDriver::data_processing(unsigned char *packet_bytes,int len)        
 	}
     int invalidValue = 0;
     int point_len = 2;
-    if(lidar_name == "N10")     point_len = 3;
+    if(lidar_name == "N10" || lidar_name == "L10")     point_len = 3;
     
     if(lidar_name == "M10_GPS"||lidar_name == "M10")
     {
@@ -547,27 +555,39 @@ void LslidarDriver::data_processing(unsigned char *packet_bytes,int len)        
 		sweep_end_time_hardware = sub_second%1000000000;
 	}
     invalidValue = package_points - invalidValue;
+    if(invalidValue>1)  invalidValue--;
+    else 
+    {
+        delete packet_bytes;
+        return;
+    }
 	for (int num = 0; num < package_points; num++)
 	{
 		int s = packet_bytes[num*point_len + data_bits_start];
 		int z = packet_bytes[num*point_len + data_bits_start + 1];
         int y  = 0;
-		if(lidar_name == "N10")     y = packet_bytes[num*point_len + data_bits_start+2];
+		if(lidar_name == "N10" || lidar_name == "L10")     y = packet_bytes[num*point_len + data_bits_start+2];
 		int dist_temp = s & 0x7F;
 		int inten_temp = s & 0x80;
 
 		if ((s * 256 + z) != 0xFFFF)
 		{	
-            if(lidar_name != "N10")
+            if(lidar_name  == "N10" || lidar_name  == "L10" )
+            {
+				scan_points_[idx].range = double(s * 256 + (z)) / 1000.f;
+				scan_points_[idx].intensity = int(y);
+
+            }
+            else if((lidar_name == "M10_P"||lidar_name == "M10_PLUS") && !high_reflection)
+            {
+                scan_points_[idx].range = double(s * 256 + (z)) / 1000.f;
+                scan_points_[idx].intensity = 0;
+            }
+            else
             {
                 scan_points_[idx].range = double(dist_temp * 256 + (z)) / 1000.f;
                 if (inten_temp)	scan_points_[idx].intensity = 255;
                 else 	        scan_points_[idx].intensity = 0;
-            }
-            else
-            {
-				scan_points_[idx].range = double(s * 256 + (z)) / 1000.f;
-				scan_points_[idx].intensity = int(y);
             }
             if ((degree + (degree_interval / invalidValue * num)) > 360)
                 scan_points_[idx].degree = degree + (degree_interval / invalidValue * num) - 360;
@@ -695,7 +715,7 @@ bool LslidarDriver::polling()
 {
     if(!is_start) return true;
     // Allocate a new shared pointer for zero-copy sharing with other nodelets.
-     unsigned char * packet_bytes = new unsigned char[1000];
+     unsigned char * packet_bytes = new unsigned char[500];
      int len = 0;
     if(interface_selection == "net")
     {	 
@@ -705,27 +725,21 @@ bool LslidarDriver::polling()
         std_msgs::msg::Byte msg;
         while (true)
         {
-            if(packet_back)
-            {
-                int len_H = packet_bytes_back[2];
-                int len_L = packet_bytes_back[3];
-                len = len_H*256 + len_L;
-                packet_back = false;
-                for (int i = 0; i < len; i++)
-                {
-                    packet_bytes[i] = packet_bytes_back[i];
-                    packet_bytes_back[i] = 0x00;
-                }
-                break;
-            }
+
             len = 0;
             // keep reading until full packet received
             len = msop_input_->getPacket(packet);
             if(packet->data[0] == 0x5a && packet->data[1] == 0x00)  
             {
+            if(lidar_name == "N10" || lidar_name == "L10")             len = 58;
+            else if(lidar_name == "M10")        len = 92;
+            else if(lidar_name == "M10_GPS")    len = 102;
+            else
+            {
                 int len_H = packet->data[1];
                 int len_L = packet->data[2];
                 len = len_H*256 + len_L;
+            }
                 for (int i = len-1; i >0; i--)
                 {
                     packet->data[i] = packet->data[i-1];
@@ -733,40 +747,25 @@ bool LslidarDriver::polling()
                 packet->data[0] = 0xa5;
             }
             
-            if(dump_file !="")
+
+            if(lidar_name == "N10" || lidar_name == "L10")             len = 58;
+            else if(lidar_name == "M10")        len = 92;
+            else if(lidar_name == "M10_GPS")    len = 102;
+            else
             {
-                if(lidar_name == "N10")             len = 58;
-                else if(lidar_name == "M10")        len = 92;
-                else if(lidar_name == "M10_GPS")    len = 102;
-                else
-                {
-                    int len_H = packet->data[2];
-                    int len_L = packet->data[3];
-                    len = len_H*256 + len_L;
-                }
-            }
-            if(lidar_name == "M10_P" && dump_file =="")   {
                 int len_H = packet->data[2];
                 int len_L = packet->data[3];
-                int len_p = len_H*256 + len_L;
-                if(len != len_p)  {
-                    //printf("%d %d\n",len,len_p);
-                    if(len == len_p+1)
-                        len = len_p;  
-                    else if(len > len_p +100)  {
-                        for (int i = 0; i < len - len_p; i++)
-                            packet_bytes_back[i] = packet->data[i+len_p];
-                        packet_back = true;
-                    }
-                }
+                len = len_H*256 + len_L;
             }
+            
+
             if(len <= 0||len>=1000)    continue;
-            if(packet->data[0] != 0xa5 && packet->data[1] != 0x5a)                  continue; 
+            if(packet->data[0] != 0xa5 || packet->data[1] != 0x5a)                  continue; 
             for (int i = 0; i < len; i++)
             {
                 packet_bytes[i] = packet->data[i];
             }
-            if(lidar_name == "N10" && packet_bytes[len-1] != N10_CalCRC8(packet_bytes, len-1))                      continue;   
+            if((lidar_name == "N10" || lidar_name == "L10") && packet_bytes[len-1] != N10_CalCRC8(packet_bytes, len-1))                      continue;   
             break;
         }
     }
@@ -781,6 +780,7 @@ bool LslidarDriver::polling()
         
 	}
     LslidarDriver::data_processing(packet_bytes,len);
+    delete packet_bytes;
     return true;
 }
 

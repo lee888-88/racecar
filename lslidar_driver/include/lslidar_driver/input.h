@@ -44,6 +44,7 @@
 #include <signal.h>
 #include <sensor_msgs/msg/time_reference.hpp>
 #include <std_msgs/msg/int8.hpp>
+#include <cmath>
 
 namespace lslidar_driver
 {

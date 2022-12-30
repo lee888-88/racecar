@@ -105,6 +105,29 @@ namespace lslidar_driver
         (void) close(sockfd_);
     }
 
+    void Input::UDP_difop()
+    {
+        sockaddr_in server_sai;
+        server_sai.sin_family = AF_INET; // IPV4 协议族
+        server_sai.sin_port = htons(UDP_PORT_NUMBER_DIFOP);
+        server_sai.sin_addr.s_addr = inet_addr(devip_str_.c_str());
+        for (int k = 0; k < 10; k++)
+        {
+            unsigned char data[188]= {0x00};
+            data[0] = 0xA5;
+            data[1] = 0x5A;
+            data[2] = 0x55;
+            data[184] = 0x08;
+            data[185] = 0x01;
+            data[186] = 0xFA;
+            data[187] = 0xFB;
+            int rtn = sendto(sockfd_, data, 188, 0, (struct sockaddr *)&server_sai, sizeof(struct sockaddr));
+            if (rtn < 0)    printf("start scan error !\n");
+            else return; 
+        }
+        return; 
+    }
+    
     void Input::UDP_order(const std_msgs::msg::Int8 msg)
     {
         int i = msg.data;
@@ -121,7 +144,7 @@ namespace lslidar_driver
             data[2] = 0x55;
             data[186] = 0xFA;
             data[187] = 0xFB;  
-            if(lidar_name == "M10" || lidar_name == "M10_TEST" || lidar_name == "M10_GPS"){
+            if(lidar_name == "M10" || lidar_name == "M10_TEST" || lidar_name == "M10_GPS" || lidar_name == "M10_P"){
                 if (i <= 1){				    //雷达启停
                     data[184] = 0x01;
                     data[185] = char(i);
@@ -141,14 +164,11 @@ namespace lslidar_driver
                     data[184] = 0x06;
                     data[185] = 0x01;
                 }    
+                else if (i == 30){				//接收设备包
+                    data[184] = 0x08;
+                    data[185] = 0x01;
+                }      
                 else return;    
-            }
-            else if(lidar_name == "M10_P"){
-                if(i <= 1){
-                data[185] = char(i);
-                data[184] = 0x01;
-                }
-                else return;
             }
             else if (lidar_name == "M10_PLUS"){   
                 data[184] = 0x0A;
@@ -185,6 +205,10 @@ namespace lslidar_driver
                 data[184] = 0x01;
                 data[185] = char(i);
                 }
+                else if(i == 30) {				//接收设备包
+                    data[184] = 0x08;
+                    data[185] = 0x01;
+                }      
                 else return;
             }
             else if(lidar_name == "N10"){

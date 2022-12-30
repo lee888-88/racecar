@@ -17,4 +17,5 @@
     interface_selection: net                                #接口选择:net 为网口,serial 为串口。
     serial_port_: /dev/ttyUSB0                              #串口连接时的串口号
     high_reflection: false                                  #M10_P雷达需填写该值,若不确定，请联系技术支持。
+    compensation: true				                              #M10系列是否使用角度补偿功能
 #    pcap: /home/ls/work/2211/M10_P_gps.pcap                 #雷达是否使用pcap包读取功能

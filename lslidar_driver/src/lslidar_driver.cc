@@ -65,6 +65,7 @@ bool LslidarDriver::loadParameters() {
     min_range = 0.3;
     max_range = 100.0;
 	use_gps_ts = true;
+    compensation = true;
     angle_disable_min = 0.0;
     angle_disable_max = 0.0;
 
@@ -75,6 +76,7 @@ bool LslidarDriver::loadParameters() {
 	this->declare_parameter<double>("max_range",100.0);
 	this->declare_parameter<bool>("use_gps_ts",false);
 	this->declare_parameter<bool>("high_reflection",false);
+    this->declare_parameter<bool>("compensation",false);
 	this->declare_parameter<double>("angle_disable_min",0.0);
 	this->declare_parameter<double>("angle_disable_max",0.0);
 	this->declare_parameter<std::string>("interface_selection","net");
@@ -86,6 +88,7 @@ bool LslidarDriver::loadParameters() {
 	this->get_parameter("min_range", min_range);
 	this->get_parameter("max_range", max_range);
 	this->get_parameter("use_gps_ts", use_gps_ts);
+    this->get_parameter("compensation", compensation);
 	this->get_parameter("angle_disable_min", angle_disable_min);
 	this->get_parameter("angle_disable_max", angle_disable_max);
 	this->get_parameter("interface_selection", interface_selection);
@@ -113,7 +116,7 @@ bool LslidarDriver::loadParameters() {
     }
     count_num = 0;
 
-    scan_points_.resize(4000);
+    scan_points_.resize(5000);
         
     if (lidar_name == "M10"){
         use_gps_ts = false;
@@ -143,7 +146,7 @@ bool LslidarDriver::loadParameters() {
         data_bits_start = 8;
         degree_bits_start = 4;
         rpm_bits_start = 6;
-        points_size_ = 4000;
+        points_size_ = 5000;
         baud_rate_=921600;
         printf("Lidar is M10_PLUS ! \n");
     }
@@ -177,7 +180,7 @@ bool LslidarDriver::loadParameters() {
         degree_bits_start = 5;
         end_degree_bits_start = 55;
         baud_rate_= 230400;
-        points_size_ = 2000; 
+        points_size_ = 2000;
         use_gps_ts = false;
         printf("Lidar is N10 ! \n");
     }
@@ -189,7 +192,7 @@ bool LslidarDriver::loadParameters() {
         degree_bits_start = 5;
         end_degree_bits_start = 55;
         baud_rate_= 230400;
-        points_size_ = 2000; 
+        points_size_ = 2000;
         use_gps_ts = false;
         printf("Lidar is L10 ! \n");
     }
@@ -197,6 +200,30 @@ bool LslidarDriver::loadParameters() {
     scan_pub = this->create_publisher<sensor_msgs::msg::LaserScan>(scan_topic, 10);	
 	difop_switch = this->create_subscription<std_msgs::msg::Int8>("lslidar_order",1 ,std::bind(&LslidarDriver::lidar_order,this,std::placeholders::_1));          //转速输入
 	return true;
+}
+
+void LslidarDriver::lidar_difop()
+{
+    if(lidar_name == "L10" || lidar_name == "N10")  return;
+    if(interface_selection == "net") msop_input_->UDP_difop();
+    else{
+        for(int k = 0 ; k <10 ; k++)
+        {   
+            unsigned char data[188]= {0x00};
+            data[0] = 0xA5;
+            data[1] = 0x5A;
+            data[2] = 0x55;
+            data[184] = 0x08;
+            data[185] = 0x01;
+            data[186] = 0xFA;
+            data[187] = 0xFB;
+            int rtn= serial_->send((const char*)data, 188);
+            if (rtn < 0)
+                printf("start scan error !\n");
+            else      return;
+        }
+    }
+    return;
 }
 
 void LslidarDriver::lidar_order(const std_msgs::msg::Int8::SharedPtr msg) {
@@ -236,44 +263,52 @@ void LslidarDriver::lidar_order(const std_msgs::msg::Int8::SharedPtr msg) {
 				data[181] = 0x0C;
 				data[184] = 0x06;
 				if(is_start) data[185] = 0x01;
-			}       
+			}   
+			else if (i == 30){				//接收设备包
+				data[184] = 0x08;
+				data[185] = 0x01;
+			}      
             else return; 
 		}
 		else if (lidar_name == "M10_PLUS"){
             data[184] = 0x0A;
             data[185] = 0x01;
             if(i == 5)       {
-            data[141] = 0x01;
-            data[142] = 0x2c;
+                data[141] = 0x01;
+                data[142] = 0x2c;
             }
             else if(i == 6)  {
-            data[141] = 0x01;
-            data[142] = 0x68;
+                data[141] = 0x01;
+                data[142] = 0x68;
             }
             else if(i == 8)  {
-            data[141] = 0x01;
-            data[142] = 0xe0;
+                data[141] = 0x01;
+                data[142] = 0xe0;
             }
             else if(i == 10) {
-            data[141] = 0x02;
-            data[142] = 0x58;
+                data[141] = 0x02;
+                data[142] = 0x58;
             }
             else if(i == 12) {
-            data[141] = 0x02;
-            data[142] = 0xd0;
+                data[141] = 0x02;
+                data[142] = 0xd0;
             }
             else if(i == 15) {
-            data[141] = 0x03;
-            data[142] = 0x84;
+                data[141] = 0x03;
+                data[142] = 0x84;
             }
             else if(i == 20) {
-            data[141] = 0x04;
-            data[142] = 0xb0;
+                data[141] = 0x04;
+                data[142] = 0xb0;
             }
             else if(i <= 1)  {
-            data[184] = 0x01;
-            data[185] = char(i);
-            }			
+                data[184] = 0x01;
+                data[185] = char(i);
+            }		
+            else if (i == 30){				//接收设备包
+				data[184] = 0x08;
+				data[185] = 0x01;
+			}   	
             else return; 
 		}
 		else if(lidar_name == "N10"){
@@ -289,12 +324,11 @@ void LslidarDriver::lidar_order(const std_msgs::msg::Int8::SharedPtr msg) {
             else return; 
 		}
         rtn= serial_->send((const char*)data, 188);
-        printf("rtn = %d\n",rtn);
+        //printf("rtn = %d\n",rtn);
 		if (rtn < 0)
 			printf("start scan error !\n");
         else{
             if(i == 1)  usleep(1000000);     //1.0s
-            
             if(i == 0)  is_start = false;
             if(i == 1)  is_start = true;
             return ;
@@ -306,8 +340,7 @@ void LslidarDriver::lidar_order(const std_msgs::msg::Int8::SharedPtr msg) {
 
 void LslidarDriver::open_serial()
 {
-        diagnostics.setHardwareID("Lslidar");
-
+    diagnostics.setHardwareID("Lslidar");
     int code = 0;
     serial_port_ = std::string("/dev/ttyUSB0");
     this->declare_parameter<std::string>("serial_port_","/dev/ttyUSB0");
@@ -418,7 +451,6 @@ void LslidarDriver::recvThread_crc(int &count,int &link_time)
 
 int LslidarDriver::receive_data(unsigned char *packet_bytes){
     int link_time = 0;
-    int q = 0;
     int len_H = 0;
     int len_L = 0;
     int len = 0;
@@ -459,19 +491,24 @@ int LslidarDriver::receive_data(unsigned char *packet_bytes){
         len_L = packet_bytes[3];
         len = len_H*256 + len_L;
     }
-
+    if(lidar_name == "M10" || lidar_name == "M10_GPS" || lidar_name == "M10_P" || lidar_name == "M10_PLUS"){
+        if(packet_bytes[2] == 0x55 && packet_bytes[3] == 0x00)    len = 188;
+    }
     while(count < len)
     {
         count_2 = serial_->read(packet_bytes+count, len-count);
         if(count_2 >= 0) count += count_2;
         LslidarDriver::recvThread_crc(count_2,link_time);
     }
-    q = len;
+    // if(len == 188){
+    //     for(int i = 0;i<len;i++)    printf("%x ",packet_bytes[i]);
+    //     printf("\n");
+    // }
     if(lidar_name == "N10" || lidar_name == "L10") 
     {
         if(packet_bytes[PACKET_SIZE-1] != N10_CalCRC8(packet_bytes, PACKET_SIZE-1))						return 0;
     }
-    return q;
+    return len;
 }
 
 uint8_t LslidarDriver::N10_CalCRC8(unsigned char * p, int len)
@@ -487,6 +524,19 @@ uint8_t LslidarDriver::N10_CalCRC8(unsigned char * p, int len)
   return crc;
 }
 
+void LslidarDriver::difop_processing(unsigned char *packet_bytes)                                 //处理设备包的数据
+{
+    int s = packet_bytes[173];
+    int z = packet_bytes[174];
+    int degree_temp = s & 0x7F;
+    int sign_temp = s & 0x80;
+    degree_compensation = double(degree_temp*256+z)/100.f;
+    if(sign_temp) degree_compensation =- degree_compensation;
+    first_compensation = false;
+    printf("degree_compensation = %f\n",degree_compensation);
+    return;
+}
+
 void LslidarDriver::data_processing(unsigned char *packet_bytes,int len)                                 //处理每一包的数据
 {
     double degree;
@@ -498,14 +548,14 @@ void LslidarDriver::data_processing(unsigned char *packet_bytes,int len)        
     int s = packet_bytes[degree_bits_start];
 	int z = packet_bytes[degree_bits_start + 1];
 
-	degree = (s * 256 + z) / 100.f;
+	degree = (s * 256 + z) / 100.f + degree_compensation;
+    degree = (degree < 0)   ? degree+360 : degree;
 	degree = (degree > 360) ? degree-360 : degree;
     if(lidar_name == "N10" || lidar_name == "L10") 
     {
 		int s_e = packet_bytes[end_degree_bits_start];
 		int z_e = packet_bytes[end_degree_bits_start+1];
 		end_degree = (s_e * 256 + z_e) / 100.f;    
-        //printf("degree = %f end_degree = %f lidar_end_degree = %f\n",degree,end_degree,lidar_end_degree);
         end_degree = (end_degree > 360) ? end_degree-360 : end_degree;    
 
 		if(degree > end_degree)
@@ -544,12 +594,12 @@ void LslidarDriver::data_processing(unsigned char *packet_bytes,int len)        
 	}
 	if(use_gps_ts)
 	{
-		pTime.tm_year 	= packet_bytes[PACKET_SIZE - 12]+2000-1900;	//x+2000
-		pTime.tm_mon 	= packet_bytes[PACKET_SIZE - 11]-1;			//1-12
-		pTime.tm_mday 	= packet_bytes[PACKET_SIZE - 10];			//1-31
-		pTime.tm_hour 	= packet_bytes[PACKET_SIZE - 9];			//0-23
-		pTime.tm_min 	= packet_bytes[PACKET_SIZE - 8];			//0-59
-		pTime.tm_sec 	= packet_bytes[PACKET_SIZE - 7];			//0-59
+		pTime.tm_year 	=  packet_bytes[PACKET_SIZE - 12]+2000-1900;	//x+2000
+		pTime.tm_mon 	=  packet_bytes[PACKET_SIZE - 11]-1;			//1-12
+		pTime.tm_mday 	=  packet_bytes[PACKET_SIZE - 10];			//1-31
+		pTime.tm_hour 	=  packet_bytes[PACKET_SIZE - 9];			//0-23
+		pTime.tm_min 	=  packet_bytes[PACKET_SIZE - 8];			//0-59
+		pTime.tm_sec 	=  packet_bytes[PACKET_SIZE - 7];			//0-59
 		sub_second		= (packet_bytes[PACKET_SIZE - 6]*256+packet_bytes[PACKET_SIZE - 5])*1000000 + (packet_bytes[PACKET_SIZE - 4]*256+packet_bytes[PACKET_SIZE - 3])*1000;		
 		sweep_end_time_gps = get_gps_stamp(pTime);
 		sweep_end_time_hardware = sub_second%1000000000;
@@ -593,7 +643,6 @@ void LslidarDriver::data_processing(unsigned char *packet_bytes,int len)        
                 scan_points_[idx].degree = degree + (degree_interval / invalidValue * num) - 360;
             else
                 scan_points_[idx].degree = degree + (degree_interval / invalidValue * num);
-            
 		}
         
         if ((scan_points_[idx].degree < last_degree && scan_points_[idx].degree < 2 && last_degree > 358)|| idx>=points_size_) 	
@@ -626,9 +675,7 @@ void LslidarDriver::data_processing(unsigned char *packet_bytes,int len)        
         }
         
 	}
-	//lock.unlock();
     packet_bytes = {0x00};
-	
     if (packet_bytes)
     {
         packet_bytes = NULL;
@@ -643,17 +690,14 @@ void LslidarDriver::pubScanThread()
 
   while (rclcpp::ok())
   {
-    
     while (wait_for_wake)
     {
       pubscan_cond_.wait(lock);
       wait_for_wake = false;
     }
     auto scan = sensor_msgs::msg::LaserScan::UniquePtr(new sensor_msgs::msg::LaserScan());
-	if(count_num <= 42 )
-		continue;
+	if(count_num <= 42 )		continue;
 	int scan_num = ceil((angle_able_max-angle_able_min)/360*count_num)+1;
-        //printf("count_num = %d\n",count_num);
     std::vector<ScanPoint> points;
     rclcpp::Time start_time;
     float scan_time;
@@ -708,6 +752,10 @@ void LslidarDriver::pubScanThread()
 	count_num = 0;
     scan_pub->publish(std::move(scan));
     wait_for_wake = true;
+    if(first_compensation && compensation)
+    {
+        lidar_difop();
+    }
   }
 }
 
@@ -717,6 +765,7 @@ bool LslidarDriver::polling()
     // Allocate a new shared pointer for zero-copy sharing with other nodelets.
      unsigned char * packet_bytes = new unsigned char[500];
      int len = 0;
+     bool difop = false;
     if(interface_selection == "net")
     {	 
         auto packet =  lslidar_msgs::msg::LslidarPacket::UniquePtr(
@@ -725,13 +774,13 @@ bool LslidarDriver::polling()
         std_msgs::msg::Byte msg;
         while (true)
         {
-
+            difop = false;
             len = 0;
             // keep reading until full packet received
             len = msop_input_->getPacket(packet);
-            if(packet->data[0] == 0x5a && packet->data[1] == 0x00)  
+            if(packet->data[0] == 0x5a)  
             {
-            if(lidar_name == "N10" || lidar_name == "L10")             len = 58;
+            if(lidar_name == "N10" || lidar_name == "L10")              len = 58;
             else if(lidar_name == "M10")        len = 92;
             else if(lidar_name == "M10_GPS")    len = 102;
             else
@@ -748,38 +797,48 @@ bool LslidarDriver::polling()
             }
             
 
-            if(lidar_name == "N10" || lidar_name == "L10")             len = 58;
-            else if(lidar_name == "M10")        len = 92;
-            else if(lidar_name == "M10_GPS")    len = 102;
+            if(lidar_name == "N10" || lidar_name == "L10")              len = 58;
+            else if(lidar_name == "M10")                                len = 92;
+            else if(lidar_name == "M10_GPS")                            len = 102;
             else
             {
                 int len_H = packet->data[2];
                 int len_L = packet->data[3];
                 len = len_H*256 + len_L;
             }
-            
+            if((lidar_name == "M10" || lidar_name == "M10_GPS" || lidar_name == "M10_P" || lidar_name == "M10_PLUS") && compensation)
+            {
+                if (packet->data[2] == 0x55 && packet->data[3] == 0x00 && packet->data[186] == 0xFA && packet->data[187] == 0xFB)
+                { 
+                    len = 188;
+                    difop = true;
+                }
+            }
 
-            if(len <= 0||len>=1000)    continue;
-            if(packet->data[0] != 0xa5 || packet->data[1] != 0x5a)                  continue; 
+            if(len <= 0 || len>=1000 || packet->data[0] != 0xa5 || packet->data[1] != 0x5a)                                                  continue;
             for (int i = 0; i < len; i++)
             {
                 packet_bytes[i] = packet->data[i];
             }
             if((lidar_name == "N10" || lidar_name == "L10") && packet_bytes[len-1] != N10_CalCRC8(packet_bytes, len-1))                      continue;   
             break;
-        }
+        } 
     }
     else{
         while (true)
         {
+            difop = false;
             len = 0;
             len = LslidarDriver::receive_data(packet_bytes);
-            if(len == 0)    continue;
+            if((lidar_name == "M10" || lidar_name == "M10_GPS" || lidar_name == "M10_P" || lidar_name == "M10_PLUS") && compensation){
+                if(packet_bytes[2] == 0x55 && packet_bytes[3] == 0x00 && packet_bytes[186] == 0xFA && packet_bytes[187] == 0xFB)    difop = true;                
+            }            if(len == 0)    continue;
             break;
         }
         
 	}
-    LslidarDriver::data_processing(packet_bytes,len);
+    if(difop)   LslidarDriver::difop_processing(packet_bytes);
+    else        LslidarDriver::data_processing(packet_bytes,len);    
     delete packet_bytes;
     return true;
 }

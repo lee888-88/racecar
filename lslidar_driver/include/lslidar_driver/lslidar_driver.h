@@ -63,8 +63,10 @@ private:
     bool loadParameters();
     bool createRosIO();
     void open_serial();
+    void lidar_difop();
     void lidar_order(const std_msgs::msg::Int8::SharedPtr msg);
     void data_processing(unsigned char *packet_bytes,int len);
+    void difop_processing(unsigned char *packet_bytes);
     void pubScanThread();
     void recvThread_crc(int &count,int &link_time);
     int receive_data(unsigned char *packet_bytes);
@@ -91,7 +93,9 @@ private:
     bool use_gps_ts;   
     bool is_start;
     bool high_reflection;
-
+    bool compensation;
+    bool first_compensation = true;
+    
     double min_range;
     double max_range;
     double angle_disable_min;
@@ -99,6 +103,7 @@ private:
     double angle_able_min;
     double angle_able_max;
     double last_degree = 0.0;	
+    double degree_compensation = 0.0;
 
     uint16_t PACKET_SIZE ;
     uint64_t sweep_end_time_gps;

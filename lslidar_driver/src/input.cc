@@ -26,7 +26,6 @@ namespace lslidar_driver
 
 
 	    private_nh->declare_parameter<std::string>("device_ip","192.168.1.102");
-        //private_nh->declare_parameter("lidar_name");
         private_nh->declare_parameter<std::string>("device_ip_difop","192.168.1.200");
         private_nh->declare_parameter<bool>("add_multicast",false);
         private_nh->declare_parameter<std::string>("group_ip","224.1.1.2");
@@ -144,7 +143,7 @@ namespace lslidar_driver
             data[2] = 0x55;
             data[186] = 0xFA;
             data[187] = 0xFB;  
-            if(lidar_name == "M10" || lidar_name == "M10_TEST" || lidar_name == "M10_GPS" || lidar_name == "M10_P"){
+            if(lidar_name == "M10" || lidar_name == "M10_GPS" || lidar_name == "M10_P"){
                 if (i <= 1){				    //雷达启停
                     data[184] = 0x01;
                     data[185] = char(i);
@@ -164,7 +163,7 @@ namespace lslidar_driver
                     data[184] = 0x06;
                     data[185] = 0x01;
                 }    
-                else if (i == 30){				//接收设备包
+                else if (i == 100){				//接收设备包
                     data[184] = 0x08;
                     data[185] = 0x01;
                 }      
@@ -205,7 +204,7 @@ namespace lslidar_driver
                 data[184] = 0x01;
                 data[185] = char(i);
                 }
-                else if(i == 30) {				//接收设备包
+                else if(i == 100) {				//接收设备包
                     data[184] = 0x08;
                     data[185] = 0x01;
                 }      

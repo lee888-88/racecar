@@ -23,7 +23,9 @@ def generate_launch_description():
                                 )
 
 
-    rviz_dir = os.path.join(get_package_share_directory('lslidar_driver'), 'rviz', 'lslidar.rviz')
+    # rviz_dir = os.path.join(get_package_share_directory('lslidar_driver'), 'rviz', 'lslidar.rviz')
+    rviz_dir = os.path.join(get_package_share_directory('lslidar_driver'), 'rviz', 'nav2_default_view.rviz')
+    
 
     rviz_node = Node(
         package='rviz2',

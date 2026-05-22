@@ -1024,7 +1024,7 @@ namespace lslidar_driver
 						}
 						else
 						{
-							double dist = points[i].range;
+							double dist = points[i+3000].range;
 							scan->ranges[point_idx + count_num] = (float)dist;
 							scan->intensities[point_idx + count_num] = points[i + 3000].intensity;
 						}
@@ -1182,10 +1182,8 @@ namespace lslidar_driver
 					point_cloud->header.stamp = static_cast<uint64_t>(timestamp * 1e6);
 					point_cloud->header.frame_id = frame_id;
 					point_cloud->height = 1;
-					// printf("now = %f\n",timestamp);
 					for (uint16_t i = 0; i < count_num; i++)
 					{
-						// printf("degree = %f\n",points[i].degree);
 						double degree = 360.0 - points[i].degree;
 						bool pass_point = false;
 						if (angle_able_max < 360)
@@ -1342,7 +1340,10 @@ namespace lslidar_driver
 							int len_L = packet_bytes[3];
 							len = len_H * 256 + len_L;
 						}
-						LslidarDriver::data_processing(packet_bytes, len);
+						if (lidar_name == "N10_P" || lidar_name == "M10_DOUBLE")
+							LslidarDriver::data_processing_2(packet_bytes, len);
+						else
+							LslidarDriver::data_processing(packet_bytes, len);
 						usleep(usleep_time);
 					}
 				}

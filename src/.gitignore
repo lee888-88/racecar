@@ -25,7 +25,3 @@ Thumbs.db
 __pycache__/
 *.pyc
 *.pyo
-
-# 临时文件
-conversations/
-*.pdf
